@@ -3,12 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <title>Painel - Dra. Gabrielle</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial; padding: 15px; }
+        h2 { margin-bottom: 10px; }
+        .consulta {
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        .botao {
+            color: white;
+            background: #d9534f;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 14px;
+        }
+    </style>
 </head>
 <body>
-    <h2>Bem-vinda, Dra. Gabrielle 👩‍⚕️</h2>
 
-    <p>Painel administrativo (em construção).</p>
+<h2>📋 Consultas Agendadas</h2>
 
-    <a href="/admin/logout">Sair</a>
+{% if consultas %}
+    {% for c in consultas %}
+        <div class="consulta">
+            <strong>📅 Data:</strong> {{ c["data"] }} <br>
+            <strong>⏰ Horário:</strong> {{ c["horario"] }} <br>
+            <strong>👤 Paciente:</strong> {{ c["nome_paciente"] }} <br><br>
+
+            <a class="botao" href="/admin/excluir/{{ c['id'] }}">
+                ❌ Excluir consulta
+            </a>
+        </div>
+    {% endfor %}
+{% else %}
+    <p>Nenhuma consulta agendada.</p>
+{% endif %}
+
+<br>
+<a href="/admin/logout">🚪 Sair</a>
+
 </body>
 </html>

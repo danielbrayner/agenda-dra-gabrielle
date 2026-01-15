@@ -92,6 +92,24 @@ def login_required(f):
     return decorated_function
 
 
+def buscar_consultas_agendadas():
+    conn = sqlite3.connect("agenda.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, data, horario, nome_paciente
+        FROM agenda
+        WHERE disponivel = 'nao'
+        ORDER BY data, horario
+    """)
+
+    consultas = cursor.fetchall()
+    conn.close()
+    return consultas
+
+
+
 
 # =============================
 # ROTAS
@@ -274,13 +292,34 @@ def admin_login():
 @app.route("/admin")
 @login_required
 def admin_panel():
-    return render_template("admin_panel.html")
+    consultas = buscar_consultas_agendadas()
+    return render_template("admin_panel.html", consultas=consultas)
+
 
 
 @app.route("/admin/logout")
 def admin_logout():
     session.clear()
     return redirect(url_for("admin_login"))
+
+
+@app.route("/admin/excluir/<int:consulta_id>")
+@login_required
+def excluir_consulta(consulta_id):
+    conn = sqlite3.connect("agenda.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE agenda
+        SET disponivel = 'sim', nome_paciente = NULL
+        WHERE id = ?
+    """, (consulta_id,))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("admin_panel"))
+
 
 
 
