@@ -99,7 +99,7 @@ def buscar_consultas_agendadas():
 
     cursor.execute("""
         SELECT id, data, horario, nome_paciente
-        FROM agenda
+        FROM agendamentos
         WHERE disponivel = 'nao'
         ORDER BY data, horario
     """)
@@ -309,7 +309,7 @@ def excluir_consulta(consulta_id):
     cursor = conn.cursor()
 
     cursor.execute("""
-        UPDATE agenda
+        UPDATE agendamentos
         SET disponivel = 'sim', nome_paciente = NULL
         WHERE id = ?
     """, (consulta_id,))
@@ -318,7 +318,6 @@ def excluir_consulta(consulta_id):
     conn.close()
 
     return redirect(url_for("admin_panel"))
-
 
 
 
