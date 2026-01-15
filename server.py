@@ -93,12 +93,11 @@ def login_required(f):
 
 
 def buscar_consultas_agendadas():
-    conn = sqlite3.connect("agenda.db")
-    conn.row_factory = sqlite3.Row
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT id, data, horario, nome_paciente
+        SELECT id, data, horario, nome_paciente, criado_em
         FROM agendamentos
         WHERE disponivel = 'nao'
         ORDER BY data, horario
@@ -107,6 +106,7 @@ def buscar_consultas_agendadas():
     consultas = cursor.fetchall()
     conn.close()
     return consultas
+
 
 
 
