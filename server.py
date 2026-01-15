@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from functools import wraps
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
@@ -6,9 +7,11 @@ from openai import OpenAI
 import sqlite3
 from datetime import datetime, timedelta
 
+
 load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "chave_padrao_insegura")
 CORS(app)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -78,6 +81,16 @@ def marcar_horario_sqlite(data, horario, nome_paciente):
     conn.commit()
     conn.close()
     return True
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("admin_logado"):
+            return redirect(url_for("admin_login"))
+        return f(*args, **kwargs)
+    return decorated_function
+
 
 
 # =============================
@@ -236,6 +249,39 @@ def chat():
     )
 
     return jsonify({"reply": completion.choices[0].message.content})
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        usuario = request.form.get("usuario")
+        senha = request.form.get("senha")
+
+        if (
+            usuario == os.getenv("ADMIN_USER")
+            and senha == os.getenv("ADMIN_PASSWORD")
+        ):
+            session["admin_logado"] = True
+            return redirect(url_for("admin_panel"))
+        else:
+            return render_template(
+                "admin_login.html",
+                erro="Usuário ou senha inválidos"
+            )
+
+    return render_template("admin_login.html")
+
+
+@app.route("/admin")
+@login_required
+def admin_panel():
+    return render_template("admin_panel.html")
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.clear()
+    return redirect(url_for("admin_login"))
+
 
 
 if __name__ == "__main__":

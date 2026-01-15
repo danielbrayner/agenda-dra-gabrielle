@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Painel Dra. Gabrielle</title>
+    <style>
+        body { font-family: Arial; background: #f2f2f2; }
+        .box {
+            width: 300px;
+            margin: 100px auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        input, button {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+        }
+        .erro { color: red; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h3>Painel da Dra. Gabrielle</h3>
+
+        <form method="POST">
+            <input type="text" name="usuario" placeholder="Usuário" required>
+            <input type="password" name="senha" placeholder="Senha" required>
+            <button type="submit">Entrar</button>
+        </form>
+
+        {% if erro %}
+            <div class="erro">{{ erro }}</div>
+        {% endif %}
+    </div>
+</body>
+</html>
