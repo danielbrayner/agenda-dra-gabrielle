@@ -107,6 +107,21 @@ def buscar_consultas_agendadas():
     conn.close()
     return consultas
 
+def buscar_horarios_livres():
+    conn = sqlite3.connect("agenda.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, data, horario
+        FROM agendamentos
+        WHERE disponivel = 'sim'
+        ORDER BY data, horario
+    """)
+
+    horarios = cursor.fetchall()
+    conn.close()
+    return horarios
 
 
 
@@ -276,6 +291,8 @@ def admin_login():
         if (
             usuario == os.getenv("ADMIN_USER")
             and senha == os.getenv("ADMIN_PASSWORD")
+                #usuario == "admin"
+                #and senha == "admin"
         ):
             session["admin_logado"] = True
             return redirect(url_for("admin_panel"))
@@ -292,7 +309,13 @@ def admin_login():
 @login_required
 def admin_panel():
     consultas = buscar_consultas_agendadas()
-    return render_template("admin_panel.html", consultas=consultas)
+    horarios_livres = buscar_horarios_livres()
+    return render_template(
+        "admin_panel.html",
+        consultas=consultas,
+        horarios_livres=horarios_livres
+    )
+
 
 
 
@@ -319,7 +342,30 @@ def excluir_consulta(consulta_id):
 
     return redirect(url_for("admin_panel"))
 
+@app.route("/admin/adicionar-horario", methods=["POST"])
+@login_required
+def adicionar_horario():
+    data = request.form.get("data")
+    horario = request.form.get("horario")
 
+    if not data or not horario:
+        return redirect(url_for("admin_panel"))
+
+    conn = sqlite3.connect("agenda.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO agendamentos (data, horario, disponivel)
+        VALUES (?, ?, 'sim')
+    """, (data, horario))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("admin_panel"))
+
+
+#if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=10000)

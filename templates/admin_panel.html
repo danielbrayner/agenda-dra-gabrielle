@@ -2,50 +2,78 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Painel - Dra. Gabrielle</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: Arial; padding: 15px; }
-        h2 { margin-bottom: 10px; }
-        .consulta {
-            border: 1px solid #ccc;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 10px;
-        }
-        .botao {
-            color: white;
-            background: #d9534f;
-            border: none;
-            padding: 6px 10px;
-            border-radius: 4px;
-            text-decoration: none;
-            font-size: 14px;
-        }
-    </style>
+    <title>Painel Administrativo - Dra. Gabrielle</title>
 </head>
 <body>
 
-<h2>📋 Consultas Agendadas</h2>
+<h1>Painel da Dra. Gabrielle</h1>
+
+<a href="/admin/logout">Sair</a>
+
+<hr>
+
+<h2>Consultas agendadas</h2>
 
 {% if consultas %}
+<table border="1" cellpadding="5">
+    <tr>
+        <th>Data</th>
+        <th>Horário</th>
+        <th>Paciente</th>
+        <th>Ação</th>
+    </tr>
     {% for c in consultas %}
-        <div class="consulta">
-            <strong>📅 Data:</strong> {{ c["data"] }} <br>
-            <strong>⏰ Horário:</strong> {{ c["horario"] }} <br>
-            <strong>👤 Paciente:</strong> {{ c["nome_paciente"] }} <br><br>
-
-            <a class="botao" href="/admin/excluir/{{ c['id'] }}">
-                ❌ Excluir consulta
+    <tr>
+        <td>{{ c["data"] }}</td>
+        <td>{{ c["horario"] }}</td>
+        <td>{{ c["nome_paciente"] }}</td>
+        <td>
+            <a href="/admin/excluir/{{ c['id'] }}"
+               onclick="return confirm('Deseja cancelar esta consulta?')">
+               Excluir
             </a>
-        </div>
+        </td>
+    </tr>
     {% endfor %}
+</table>
 {% else %}
-    <p>Nenhuma consulta agendada.</p>
+<p>Nenhuma consulta agendada.</p>
 {% endif %}
 
-<br>
-<a href="/admin/logout">🚪 Sair</a>
+<hr>
+
+<h2>Horários livres</h2>
+
+{% if horarios_livres %}
+<table border="1" cellpadding="5">
+    <tr>
+        <th>Data</th>
+        <th>Horário</th>
+    </tr>
+    {% for h in horarios_livres %}
+    <tr>
+        <td>{{ h["data"] }}</td>
+        <td>{{ h["horario"] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+<p>Nenhum horário livre cadastrado.</p>
+{% endif %}
+
+<hr>
+
+<h2>Adicionar novo horário</h2>
+
+<form method="POST" action="/admin/adicionar-horario">
+    <label>Data:</label>
+    <input type="date" name="data" required>
+
+    <label>Horário:</label>
+    <input type="time" name="horario" required>
+
+    <button type="submit">Adicionar</button>
+</form>
 
 </body>
 </html>
