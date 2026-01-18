@@ -324,10 +324,10 @@ def chat():
 def admin_login():
     if request.method == "POST":
         if (
-            #request.form.get("usuario") == os.getenv("ADMIN_USER")
-            #and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
-            request.form.get("usuario") == "admin"
-            and request.form.get("senha") == "admin"
+            request.form.get("usuario") == os.getenv("ADMIN_USER")
+            and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
+            #request.form.get("usuario") == "admin"
+            #and request.form.get("senha") == "admin"
         ):
             session["admin_logado"] = True
             return redirect(url_for("admin_panel"))
@@ -404,7 +404,7 @@ def excluir_horario_livre(horario_id):
     conn.close()
     return redirect(url_for("admin_panel"))
 
-if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
+#if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
 
-#if __name__ == "__main__":
-#    app.run(host="0.0.0.0", port=10000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
