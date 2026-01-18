@@ -3,77 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <title>Painel Administrativo - Dra. Gabrielle</title>
+
+    <!-- Bootstrap -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    >
+
+    <style>
+        /* Centralização perfeita dos botões no topo */
+        .top-bar {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .menu-central {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .top-bar {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+
+            .menu-central {
+                justify-content: center;
+            }
+        }
+    </style>
 </head>
-<body>
 
-<h1>Painel da Dra. Gabrielle</h1>
+<body class="bg-light">
 
-<a href="/admin/logout">Sair</a>
+<div class="container py-4">
 
-<hr>
+    <!-- TOPO -->
+    <div class="top-bar mb-4">
 
-<h2>Consultas agendadas</h2>
+        <h4 class="mb-0">📋 Painel da Dra. Gabrielle</h4>
 
-{% if consultas %}
-<table border="1" cellpadding="5">
-    <tr>
-        <th>Data</th>
-        <th>Horário</th>
-        <th>Paciente</th>
-        <th>Ação</th>
-    </tr>
-    {% for c in consultas %}
-    <tr>
-        <td>{{ c["data"] }}</td>
-        <td>{{ c["horario"] }}</td>
-        <td>{{ c["nome_paciente"] }}</td>
-        <td>
-            <a href="/admin/excluir/{{ c['id'] }}"
-               onclick="return confirm('Deseja cancelar esta consulta?')">
-               Excluir
-            </a>
-        </td>
-    </tr>
-    {% endfor %}
-</table>
-{% else %}
-<p>Nenhuma consulta agendada.</p>
-{% endif %}
+        <!-- BOTÕES CENTRAIS -->
+        <div class="menu-central">
+            <button class="btn btn-outline-primary btn-sm"
+                    onclick="mostrarSecao('consultas')">
+                Consultas agendadas
+            </button>
 
-<hr>
+            <button class="btn btn-outline-success btn-sm"
+                    onclick="mostrarSecao('horarios')">
+                Horários livres
+            </button>
 
-<h2>Horários livres</h2>
+            <button class="btn btn-outline-secondary btn-sm"
+                    onclick="mostrarSecao('novo')">
+                Novo horário
+            </button>
+        </div>
 
-{% if horarios_livres %}
-<table border="1" cellpadding="5">
-    <tr>
-        <th>Data</th>
-        <th>Horário</th>
-    </tr>
-    {% for h in horarios_livres %}
-    <tr>
-        <td>{{ h["data"] }}</td>
-        <td>{{ h["horario"] }}</td>
-    </tr>
-    {% endfor %}
-</table>
-{% else %}
-<p>Nenhum horário livre cadastrado.</p>
-{% endif %}
+        <a href="/admin/logout" class="btn btn-outline-danger btn-sm">
+            Sair
+        </a>
 
-<hr>
+    </div>
 
-<h2>Adicionar novo horário</h2>
+    <!-- CONSULTAS AGENDADAS -->
+    <div id="consultas" class="card mb-4 secao">
+        <div class="card-header bg-primary text-white">
+            Consultas agendadas
+        </div>
+        <div class="card-body table-responsive">
 
-<form method="POST" action="/admin/adicionar-horario">
-    <label>Data:</label>
-    <input type="date" name="data" required>
+            {% if consultas %}
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Horário</th>
+                        <th>Paciente</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in consultas %}
+                    <tr>
+                        <td>{{ c.data }}</td>
+                        <td>{{ c.horario }}</td>
+                        <td>{{ c.nome_paciente }}</td>
+                        <td class="text-end">
+                            <a href="/admin/excluir/{{ c.id }}"
+                               class="btn btn-sm btn-danger"
+                               onclick="return confirm('Deseja cancelar esta consulta?')">
+                                Cancelar
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted mb-0">Nenhuma consulta agendada.</p>
+            {% endif %}
 
-    <label>Horário:</label>
-    <input type="time" name="horario" required>
+        </div>
+    </div>
 
-    <button type="submit">Adicionar</button>
-</form>
+    <!-- HORÁRIOS LIVRES -->
+    <div id="horarios" class="card mb-4 secao d-none">
+        <div class="card-header bg-success text-white">
+            Horários livres
+        </div>
+        <div class="card-body table-responsive">
+
+            {% if horarios_livres %}
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Horário</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in horarios_livres %}
+                    <tr>
+                        <td>{{ h.data }}</td>
+                        <td>{{ h.horario }}</td>
+                        <td class="text-end">
+                            <a href="/admin/excluir-horario/{{ h.id }}"
+                               class="btn btn-sm btn-outline-danger"
+                               onclick="return confirm('Excluir este horário?')">
+                                Excluir
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted mb-0">Nenhum horário livre cadastrado.</p>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <!-- NOVO HORÁRIO -->
+    <div id="novo" class="card secao d-none">
+        <div class="card-header">
+            ➕ Adicionar novo horário
+        </div>
+        <div class="card-body">
+
+            <form method="POST" action="/admin/adicionar-horario">
+                <div class="row g-3">
+
+                    <div class="col-md-5">
+                        <label class="form-label">Data</label>
+                        <input type="date" name="data" class="form-control" required>
+                    </div>
+
+                    <div class="col-md-5">
+                        <label class="form-label">Horário</label>
+                        <input type="time" name="horario" class="form-control" required>
+                    </div>
+
+                    <div class="col-md-2 d-grid">
+                        <button class="btn btn-primary">
+                            Adicionar
+                        </button>
+                    </div>
+
+                </div>
+            </form>
+
+        </div>
+    </div>
+
+</div>
+
+<!-- SCRIPT -->
+<script>
+    function mostrarSecao(id) {
+        document.querySelectorAll(".secao").forEach(secao => {
+            secao.classList.add("d-none");
+        });
+
+        document.getElementById(id).classList.remove("d-none");
+    }
+</script>
 
 </body>
 </html>

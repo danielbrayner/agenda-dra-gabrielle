@@ -3,18 +3,14 @@ from functools import wraps
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
 import sqlite3
 from datetime import datetime, timedelta
-
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "chave_padrao_insegura")
 CORS(app)
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # =============================
 # CONTROLE DE ESTADO
@@ -61,7 +57,6 @@ def marcar_horario_sqlite(data, horario, nome_paciente):
     """, (str(data), horario))
 
     row = cursor.fetchone()
-
     if not row:
         conn.close()
         return False
@@ -82,48 +77,66 @@ def marcar_horario_sqlite(data, horario, nome_paciente):
     conn.close()
     return True
 
-
+# =============================
+# AUTH ADMIN
+# =============================
 def login_required(f):
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated(*args, **kwargs):
         if not session.get("admin_logado"):
             return redirect(url_for("admin_login"))
         return f(*args, **kwargs)
-    return decorated_function
+    return decorated
+
+# =============================
+# INTENÇÕES
+# =============================
+def detectar_intencao(msg):
+    msg = msg.lower()
+
+    if any(p in msg for p in ["reiniciar", "recomeçar"]):
+        return "REINICIAR"
+    if any(p in msg for p in ["quanto custa", "valor", "preço", "preco"]):
+        return "PRECO"
+    if any(p in msg for p in [
+        "onde atende",
+        "onde a dra atende",
+        "local de atendimento",
+        "local",
+        "endereço",
+        "endereco",
+        "consultório",
+        "consultorio"
+    ]):
+        return "LOCAL"
+    if any(p in msg for p in ["horário", "horarios", "disponível", "disponiveis", "vaga"]):
+        return "HORARIOS"
+    if any(p in msg for p in ["marcar", "agendar"]):
+        return "AGENDAR"
+    if any(p in msg for p in ["não quero marcar", "nao quero marcar"]):
+        return "DESISTIR"
+
+    if any(p in msg for p in ["plano", "convênio", "convenio", "atende plano"]):
+        return "PLANO"
+
+    return "DESCONHECIDO"
 
 
-def buscar_consultas_agendadas():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT id, data, horario, nome_paciente, criado_em
-        FROM agendamentos
-        WHERE disponivel = 'nao'
-        ORDER BY data, horario
-    """)
-
-    consultas = cursor.fetchall()
-    conn.close()
-    return consultas
-
-def buscar_horarios_livres():
-    conn = sqlite3.connect("agenda.db")
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT id, data, horario
-        FROM agendamentos
-        WHERE disponivel = 'sim'
-        ORDER BY data, horario
-    """)
-
-    horarios = cursor.fetchall()
-    conn.close()
-    return horarios
+def parece_nome(texto):
+    proibidas = ["valor", "horario", "consulta", "onde", "preço", "preco"]
+    texto = texto.lower()
+    return len(texto.split()) >= 1 and not any(p in texto for p in proibidas)
 
 
+def eh_pergunta_administrativa(msg):
+    palavras = [
+        "quanto custa", "valor", "preço", "preco",
+        "onde atende", "endereço", "endereco",
+        "local", "consultório", "consultorio",
+        "duração", "duracao", "tempo",
+        "pagamento", "forma de pagamento"
+    ]
+    return any(p in msg for p in palavras)
 
 # =============================
 # ROTAS
@@ -136,10 +149,10 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json() or {}
-    user_message_original = data.get("message", "").strip()
-    user_message = user_message_original.lower()
+    mensagem_original = data.get("message", "").strip()
+    mensagem = mensagem_original.lower()
 
-    if not user_message:
+    if not mensagem:
         return jsonify({"error": "Mensagem vazia"}), 400
 
     user_id = "usuario_unico"
@@ -149,75 +162,117 @@ def chat():
             "etapa": "inicio",
             "nome": None,
             "data": None,
-            "horario": None
+            "horario": None,
+            "boas_vindas_enviadas": False
         }
 
     estado = estado_usuario[user_id]
+    intencao = detectar_intencao(mensagem)
 
     # =============================
-    # INÍCIO
+    # COMANDOS GLOBAIS
+    # =============================
+    if intencao == "REINICIAR":
+        estado_usuario.pop(user_id, None)
+        return jsonify({"reply": "🔄 Atendimento reiniciado. Como posso ajudar?"})
+
+    if intencao == "DESISTIR":
+        estado_usuario.pop(user_id, None)
+        return jsonify({"reply": "Tudo bem 😊 Se precisar, estarei por aqui."})
+
+    # =============================
+    # ETAPA INICIAL
     # =============================
     if estado["etapa"] == "inicio":
 
-        if any(p in user_message for p in ["bom dia", "boa tarde", "boa noite"]):
-            hora = datetime.now().hour
-            saudacao = "Bom dia" if hora < 12 else "Boa tarde" if hora < 18 else "Boa noite"
+        if not estado["boas_vindas_enviadas"]:
+            estado["boas_vindas_enviadas"] = True
             return jsonify({
-                "reply": f"{saudacao}! 😊 Sou o assistente virtual inteligente da Dra. Gabrielle. "
-                         "Espero que esteja bem. Como posso ajudar?"
+                "reply": (
+                    "Sou o assistente virtual inteligente da Dra. Gabrielle. "
+                    "Espero que esteja bem 😊. Como posso ajudar?\n"
+                    "Você pode reiniciar esse atendimento a qualquer momento digitando *Reiniciar*."
+                )
             })
 
-        if any(p in user_message for p in ["receita", "remédio", "medicamento"]):
-            return jsonify({
-                "reply": "Entendi. Vou encaminhar sua mensagem para a Dra. Gabrielle e, assim que possível, "
-                         "ela assumirá a conversa por aqui."
-            })
+        if mensagem in ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite"]:
+            return jsonify({"reply": "😊 Posso informar valores, local ou te ajudar a agendar uma consulta."})
 
-        if any(p in user_message for p in ["marcar", "agendar", "consulta", "atendimento"]):
+        if intencao == "PRECO":
+            return jsonify({"reply": "💰 O valor da consulta é R$ 450,00 (particular)."})
+
+        if intencao == "LOCAL":
+            return jsonify({"reply": "📍 A Dra Gabrielle atende presencialmente no Shopping Aldeota – Sala 1605"})
+
+        if intencao == "HORARIOS":
+            horarios = buscar_disponibilidade_sqlite()
+            if not horarios:
+                return jsonify({"reply": "No momento não há horários disponíveis."})
+
+            texto = "📅 Horários disponíveis:\n"
+            for d, h in horarios:
+                texto += f"- {d.strftime('%d/%m/%Y')} às {h}\n"
+            texto += "\nSe quiser, posso agendar para você 😊"
+            return jsonify({"reply": texto})
+
+        if intencao == "AGENDAR":
             estado["etapa"] = "pedir_nome"
+            return jsonify({"reply": "Perfeito 😊 Qual é o seu nome completo?"})
+
+        if intencao == "PLANO":
             return jsonify({
-                "reply": "Claro! Para agendar, preciso apenas do seu nome completo 😊"
+                "reply": (
+                    "💳 A Dra. Gabrielle atende apenas consultas particulares.\n\n"
+                    "Se quiser, posso te informar valores ou ajudar no agendamento 😊"
+                )
             })
 
-        if "quanto custa" in user_message or "valor" in user_message:
-            return jsonify({"reply": "O valor da consulta é R$ 450,00 (particular)."})
+        return jsonify({"reply": "😊 Posso te ajudar com valores, local ou agendamento."})
 
     # =============================
-    # NOME DO PACIENTE
+    # PEDIR NOME
     # =============================
-    elif estado["etapa"] == "pedir_nome":
-        estado["nome"] = user_message_original
+    if estado["etapa"] == "pedir_nome":
+
+        if eh_pergunta_administrativa(mensagem):
+            if "valor" in mensagem or "preço" in mensagem or "preco" in mensagem:
+                return jsonify({"reply": "💰 O valor da consulta é R$ 450,00.\n\nQuando quiser continuar, me informe seu nome completo 😊"})
+            if "onde atende" in mensagem or "endereco" in mensagem or "endereço" in mensagem:
+                return jsonify({"reply": "📍 Shopping Aldeota – Sala 1605\n\nQuando quiser continuar, me informe seu nome completo 😊"})
+            if "duracao" in mensagem or "duração" in mensagem:
+                return jsonify({"reply": "⏱️ A consulta dura cerca de 1 hora.\n\nQuando quiser continuar, me informe seu nome completo 😊"})
+
+        if not parece_nome(mensagem_original):
+            return jsonify({"reply": "😊 Para continuar o agendamento, me informe seu *nome completo*."})
+
+        estado["nome"] = mensagem_original
         estado["etapa"] = "mostrar_horarios"
 
         horarios = buscar_disponibilidade_sqlite()
         if not horarios:
             estado_usuario.pop(user_id)
-            return jsonify({"reply": "No momento não há horários disponíveis nas próximas duas semanas."})
+            return jsonify({"reply": "No momento não há horários disponíveis."})
 
         texto = "Temos os seguintes horários disponíveis:\n"
         for d, h in horarios:
             texto += f"- {d.strftime('%d/%m/%Y')} às {h}\n"
-
         texto += "\nInforme a data e o horário desejados (ex: 18/12 14:00)."
         return jsonify({"reply": texto})
 
     # =============================
-    # ESCOLHA DE DATA / HORÁRIO
+    # ESCOLHER HORÁRIO
     # =============================
-    elif estado["etapa"] == "mostrar_horarios":
+    if estado["etapa"] == "mostrar_horarios":
         try:
-            partes = user_message.replace("às", "").replace("as", "").split()
-            data_str = partes[0]
-            hora_str = partes[1].replace("h", "").strip()
-
+            partes = mensagem.replace("às", "").replace("as", "").split()
+            data_str, hora_str = partes[0], partes[1]
             if ":" not in hora_str:
-                hora_str = f"{hora_str}:00"
+                hora_str += ":00"
 
             dia, mes = map(int, data_str.split("/"))
             hoje = datetime.now().date()
             ano = hoje.year
             data = datetime(ano, mes, dia).date()
-
             if data < hoje:
                 data = datetime(ano + 1, mes, dia).date()
 
@@ -226,97 +281,77 @@ def chat():
             estado["etapa"] = "confirmacao"
 
             return jsonify({
-                "reply": f"Perfeito! 😊 Confirmando:\n"
-                         f"📅 Data: {data.strftime('%d/%m/%Y')}\n"
-                         f"⏰ Horário: {hora_str}\n"
-                         f"👤 Nome: {estado['nome']}\n\n"
-                         f"Está correto? (sim ou não)"
+                "reply": (
+                    f"Confirmando:\n📅 {data.strftime('%d/%m/%Y')}\n"
+                    f"⏰ {hora_str}\n👤 {estado['nome']}\n\n"
+                    "Está correto? (sim ou não)"
+                )
             })
         except:
-            return jsonify({"reply": "Não consegui entender. Use o formato: 18/12 14:00"})
+            return jsonify({"reply": "Use o formato: 18/12 14:00"})
 
     # =============================
     # CONFIRMAÇÃO
     # =============================
-    elif estado["etapa"] == "confirmacao":
-        if "sim" in user_message:
-            sucesso = marcar_horario_sqlite(
-                estado["data"],
-                estado["horario"],
-                estado["nome"]
-            )
+    if estado["etapa"] == "confirmacao":
 
+        if "sim" in mensagem:
+            sucesso = marcar_horario_sqlite(
+                estado["data"], estado["horario"], estado["nome"]
+            )
             estado_usuario.pop(user_id)
 
             if sucesso:
                 return jsonify({
-                    "reply": "✅ Consulta confirmada com sucesso!\n"
-                             "📍 Shopping Aldeota, sala 1605\n"
-                             "⏰ Duração: 1 hora\n"
-                             "💳 Valor: R$ 450,00 (particular)\n\n"
-                             "Qualquer dúvida, fico à disposição 😊"
+                    "reply": (
+                        "✅ Consulta confirmada!\n"
+                        "📍 Shopping Aldeota – Sala 1605\n"
+                        "💰 Valor: R$ 450,00\n\n"
+                        "Qualquer dúvida, estou à disposição 😊"
+                    )
                 })
-            else:
-                return jsonify({"reply": "❌ Esse horário não está mais disponível. Escolha outro, por favor."})
 
-        else:
-            estado_usuario.pop(user_id)
-            return jsonify({"reply": "Tudo bem! Se quiser, posso ajudar a agendar outro horário 😊"})
+            return jsonify({"reply": "❌ Esse horário não está mais disponível."})
 
-    # =============================
-    # FALLBACK
-    # =============================
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Você é um assistente exclusivo da Dra. Gabrielle, médica psiquiatra. "
-                    "Responda apenas informações administrativas da consulta."
-                )
-            },
-            {"role": "user", "content": user_message_original}
-        ]
-    )
+        estado_usuario.pop(user_id)
+        return jsonify({"reply": "Tudo bem 😊 Se quiser, posso ajudar a agendar outro horário."})
 
-    return jsonify({"reply": completion.choices[0].message.content})
 
+# =============================
+# ADMIN
+# =============================
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     if request.method == "POST":
-        usuario = request.form.get("usuario")
-        senha = request.form.get("senha")
-
         if (
-            usuario == os.getenv("ADMIN_USER")
-            and senha == os.getenv("ADMIN_PASSWORD")
-                #usuario == "admin"
-                #and senha == "admin"
+            #request.form.get("usuario") == os.getenv("ADMIN_USER")
+            #and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
+            request.form.get("usuario") == "admin"
+            and request.form.get("senha") == "admin"
         ):
             session["admin_logado"] = True
             return redirect(url_for("admin_panel"))
-        else:
-            return render_template(
-                "admin_login.html",
-                erro="Usuário ou senha inválidos"
-            )
-
+        return render_template("admin_login.html", erro="Usuário ou senha inválidos")
     return render_template("admin_login.html")
 
 
 @app.route("/admin")
 @login_required
 def admin_panel():
-    consultas = buscar_consultas_agendadas()
-    horarios_livres = buscar_horarios_livres()
+    conn = get_db_connection()
+    consultas = conn.execute(
+        "SELECT * FROM agendamentos WHERE disponivel='nao' ORDER BY data, horario"
+    ).fetchall()
+    horarios_livres = conn.execute(
+        "SELECT * FROM agendamentos WHERE disponivel='sim' ORDER BY data, horario"
+    ).fetchall()
+    conn.close()
+
     return render_template(
         "admin_panel.html",
         consultas=consultas,
         horarios_livres=horarios_livres
     )
-
-
 
 
 @app.route("/admin/logout")
@@ -328,19 +363,16 @@ def admin_logout():
 @app.route("/admin/excluir/<int:consulta_id>")
 @login_required
 def excluir_consulta(consulta_id):
-    conn = sqlite3.connect("agenda.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
+    conn = get_db_connection()
+    conn.execute("""
         UPDATE agendamentos
-        SET disponivel = 'sim', nome_paciente = NULL
-        WHERE id = ?
+        SET disponivel='sim', nome_paciente=NULL
+        WHERE id=?
     """, (consulta_id,))
-
     conn.commit()
     conn.close()
-
     return redirect(url_for("admin_panel"))
+
 
 @app.route("/admin/adicionar-horario", methods=["POST"])
 @login_required
@@ -348,24 +380,31 @@ def adicionar_horario():
     data = request.form.get("data")
     horario = request.form.get("horario")
 
-    if not data or not horario:
-        return redirect(url_for("admin_panel"))
-
-    conn = sqlite3.connect("agenda.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO agendamentos (data, horario, disponivel)
-        VALUES (?, ?, 'sim')
-    """, (data, horario))
-
-    conn.commit()
-    conn.close()
+    if data and horario:
+        conn = get_db_connection()
+        conn.execute(
+            "INSERT INTO agendamentos (data, horario, disponivel) VALUES (?, ?, 'sim')",
+            (data, horario)
+        )
+        conn.commit()
+        conn.close()
 
     return redirect(url_for("admin_panel"))
 
 
-#if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
+@app.route("/admin/excluir-horario/<int:horario_id>")
+@login_required
+def excluir_horario_livre(horario_id):
+    conn = get_db_connection()
+    conn.execute(
+        "DELETE FROM agendamentos WHERE id=? AND disponivel='sim'",
+        (horario_id,)
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("admin_panel"))
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=10000)
+if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
+
+#if __name__ == "__main__":
+#    app.run(host="0.0.0.0", port=10000)
