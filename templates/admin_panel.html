@@ -11,7 +11,6 @@
     >
 
     <style>
-        /* Centralização perfeita dos botões no topo */
         .top-bar {
             display: grid;
             grid-template-columns: auto 1fr auto;
@@ -31,10 +30,6 @@
                 grid-template-columns: 1fr;
                 text-align: center;
             }
-
-            .menu-central {
-                justify-content: center;
-            }
         }
     </style>
 </head>
@@ -48,7 +43,6 @@
 
         <h4 class="mb-0">📋 Painel da Dra. Gabrielle</h4>
 
-        <!-- BOTÕES CENTRAIS -->
         <div class="menu-central">
             <button class="btn btn-outline-primary btn-sm"
                     onclick="mostrarSecao('consultas')">
@@ -72,7 +66,7 @@
 
     </div>
 
-    <!-- CONSULTAS AGENDADAS -->
+    <!-- CONSULTAS -->
     <div id="consultas" class="card mb-4 secao">
         <div class="card-header bg-primary text-white">
             Consultas agendadas
@@ -80,32 +74,65 @@
         <div class="card-body table-responsive">
 
             {% if consultas %}
-            <table class="table table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th>Data</th>
-                        <th>Horário</th>
-                        <th>Paciente</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for c in consultas %}
-                    <tr>
-                        <td>{{ c.data }}</td>
-                        <td>{{ c.horario }}</td>
-                        <td>{{ c.nome_paciente }}</td>
-                        <td class="text-end">
-                            <a href="/admin/excluir/{{ c.id }}"
-                               class="btn btn-sm btn-danger"
-                               onclick="return confirm('Deseja cancelar esta consulta?')">
-                                Cancelar
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <form method="POST" action="/admin/excluir-consultas-lote#consultas">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>
+                                <input type="checkbox" onclick="toggleAll(this, 'consulta')">
+                            </th>
+                            <th>Data</th>
+                            <th>Horário</th>
+                            <th>Modalidade</th>
+                            <th>Paciente</th>
+                            <th>Telefone</th>
+                            <th>Confirmação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in consultas %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" name="consulta_ids" value="{{ c.id }}" class="consulta">
+                            </td>
+                            <td>{{ c.data[8:10] }}/{{ c.data[5:7] }}/{{ c.data[0:4] }}</td>
+                            <td>{{ c.horario }}</td>
+                            <td>{{ c.modalidade }}</td>
+                            <td>{{ c.nome_paciente }}</td>
+                            <td>{{ c.telefone }}</td>
+                            <td>
+                                <a
+                                    href="https://wa.me/55{{ c.telefone | replace(' ', '') | replace('-', '') }}?text={{
+                                        (
+                                            'Olá! Você tem uma consulta marcada com a Dra Gabrielle no dia '
+                                            ~ c.data[8:10] ~ '/' ~ c.data[5:7] ~ '/' ~ c.data[0:4]
+                                            ~ ' às '
+                                            ~ c.horario
+                                            ~ ' na modalidade '
+                                            ~ c.modalidade
+                                            ~ '.\n\nLembrando que a Dra atende no Shopping Aldeota - Sala 1605. '
+                                            ~ 'Caso sua consulta seja online, a Dra irá enviar um link no horário marcado.\n\n'
+                                            ~ 'Posso confirmar sua consulta?'
+                                        ) | urlencode
+                                    }}"
+                                    target="_blank"
+                                    class="btn btn-success btn-sm"
+                                    title="Enviar mensagem de confirmação"
+                                >
+                                    📲 Confirmar
+                                </a>
+                            </td>
+
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <button class="btn btn-danger mt-2"
+                        onclick="return confirm('Cancelar consultas selecionadas?')">
+                    🗑️ Cancelar selecionadas
+                </button>
+            </form>
             {% else %}
             <p class="text-muted mb-0">Nenhuma consulta agendada.</p>
             {% endif %}
@@ -113,7 +140,7 @@
         </div>
     </div>
 
-    <!-- HORÁRIOS LIVRES -->
+    <!-- HORÁRIOS -->
     <div id="horarios" class="card mb-4 secao d-none">
         <div class="card-header bg-success text-white">
             Horários livres
@@ -121,30 +148,35 @@
         <div class="card-body table-responsive">
 
             {% if horarios_livres %}
-            <table class="table table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th>Data</th>
-                        <th>Horário</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for h in horarios_livres %}
-                    <tr>
-                        <td>{{ h.data }}</td>
-                        <td>{{ h.horario }}</td>
-                        <td class="text-end">
-                            <a href="/admin/excluir-horario/{{ h.id }}"
-                               class="btn btn-sm btn-outline-danger"
-                               onclick="return confirm('Excluir este horário?')">
-                                Excluir
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <form method="POST" action="/admin/excluir-horarios-lote#horarios">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>
+                                <input type="checkbox" onclick="toggleAll(this, 'horario')">
+                            </th>
+                            <th>Data</th>
+                            <th>Horário</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in horarios_livres %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" name="horario_ids" value="{{ h.id }}" class="horario">
+                            </td>
+                            <td>{{ h.data[8:10] }}/{{ h.data[5:7] }}/{{ h.data[0:4] }}</td>
+                            <td>{{ h.horario }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <button class="btn btn-outline-danger mt-2"
+                        onclick="return confirm('Excluir horários selecionados?')">
+                    🗑️ Excluir selecionados
+                </button>
+            </form>
             {% else %}
             <p class="text-muted mb-0">Nenhum horário livre cadastrado.</p>
             {% endif %}
@@ -152,19 +184,24 @@
         </div>
     </div>
 
-    <!-- NOVO HORÁRIO -->
+    <!-- NOVO -->
     <div id="novo" class="card secao d-none">
         <div class="card-header">
             ➕ Adicionar novo horário
         </div>
         <div class="card-body">
 
-            <form method="POST" action="/admin/adicionar-horario">
+            <form method="POST" action="/admin/adicionar-horario#novo">
                 <div class="row g-3">
-
                     <div class="col-md-5">
                         <label class="form-label">Data</label>
-                        <input type="date" name="data" class="form-control" required>
+                        <input
+                            type="date"
+                            name="data"
+                            class="form-control"
+                            value="{{ request.args.get('data', '') }}"
+                            required
+                        >
                     </div>
 
                     <div class="col-md-5">
@@ -177,7 +214,6 @@
                             Adicionar
                         </button>
                     </div>
-
                 </div>
             </form>
 
@@ -186,16 +222,30 @@
 
 </div>
 
-<!-- SCRIPT -->
 <script>
-    function mostrarSecao(id) {
-        document.querySelectorAll(".secao").forEach(secao => {
-            secao.classList.add("d-none");
-        });
+function toggleAll(master, classe) {
+    document.querySelectorAll('.' + classe).forEach(cb => {
+        cb.checked = master.checked;
+    });
+}
 
-        document.getElementById(id).classList.remove("d-none");
+function mostrarSecao(id) {
+    document.querySelectorAll('.secao').forEach(secao => {
+        secao.classList.add('d-none');
+    });
+
+    document.getElementById(id).classList.remove('d-none');
+    window.location.hash = id;
+}
+
+window.addEventListener('load', () => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash) {
+        mostrarSecao(hash);
     }
+});
 </script>
 
 </body>
 </html>
+

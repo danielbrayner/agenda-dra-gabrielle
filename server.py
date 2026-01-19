@@ -47,7 +47,7 @@ def buscar_disponibilidade_sqlite():
     return [(datetime.strptime(r["data"], "%Y-%m-%d").date(), r["horario"]) for r in rows]
 
 
-def marcar_horario_sqlite(data, horario, nome_paciente):
+def marcar_horario_sqlite(data, horario, nome_paciente, telefone, modalidade):
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -65,10 +65,14 @@ def marcar_horario_sqlite(data, horario, nome_paciente):
         UPDATE agendamentos
         SET disponivel = 'nao',
             nome_paciente = ?,
+            telefone = ?,
+            modalidade = ?,
             criado_em = ?
         WHERE id = ?
     """, (
         nome_paciente,
+        telefone,
+        modalidade,
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         row["id"]
     ))
@@ -88,6 +92,12 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+
+def parece_telefone(texto):
+    numeros = "".join(c for c in texto if c.isdigit())
+    return 10 <= len(numeros) <= 11
+
+
 # =============================
 # INTENÇÕES
 # =============================
@@ -101,6 +111,7 @@ def detectar_intencao(msg):
     if any(p in msg for p in [
         "onde atende",
         "onde a dra atende",
+        "onde ela atende",
         "local de atendimento",
         "local",
         "endereço",
@@ -161,6 +172,8 @@ def chat():
         estado_usuario[user_id] = {
             "etapa": "inicio",
             "nome": None,
+            "telefone": None,
+            "modalidade": None,
             "data": None,
             "horario": None,
             "boas_vindas_enviadas": False
@@ -191,7 +204,7 @@ def chat():
                 "reply": (
                     "Sou o assistente virtual inteligente da Dra. Gabrielle. "
                     "Espero que esteja bem 😊. Como posso ajudar?\n"
-                    "Você pode reiniciar esse atendimento a qualquer momento digitando *Reiniciar*."
+                    "Você pode reiniciar esse atendimento a qualquer momento digitando Reiniciar."
                 )
             })
 
@@ -246,6 +259,20 @@ def chat():
             return jsonify({"reply": "😊 Para continuar o agendamento, me informe seu *nome completo*."})
 
         estado["nome"] = mensagem_original
+        estado["etapa"] = "pedir_telefone"
+
+
+    # =============================
+    # PEDIR TELEFONE
+    # =============================
+    if estado["etapa"] == "pedir_telefone":
+
+        if not parece_telefone(mensagem_original):
+            return jsonify({
+                "reply": "📞 Por favor, informe um telefone válido com DDD (ex: 85999999999)."
+            })
+
+        estado["telefone"] = mensagem_original
         estado["etapa"] = "mostrar_horarios"
 
         horarios = buscar_disponibilidade_sqlite()
@@ -256,6 +283,7 @@ def chat():
         texto = "Temos os seguintes horários disponíveis:\n"
         for d, h in horarios:
             texto += f"- {d.strftime('%d/%m/%Y')} às {h}\n"
+
         texto += "\nInforme a data e o horário desejados (ex: 18/12 14:00)."
         return jsonify({"reply": texto})
 
@@ -278,17 +306,48 @@ def chat():
 
             estado["data"] = data
             estado["horario"] = hora_str
-            estado["etapa"] = "confirmacao"
 
-            return jsonify({
-                "reply": (
-                    f"Confirmando:\n📅 {data.strftime('%d/%m/%Y')}\n"
-                    f"⏰ {hora_str}\n👤 {estado['nome']}\n\n"
-                    "Está correto? (sim ou não)"
-                )
-            })
         except:
             return jsonify({"reply": "Use o formato: 18/12 14:00"})
+
+        estado["etapa"] = "perguntar_modalidade"
+        return jsonify({
+            "reply": (
+                "A consulta será:\n"
+                "🏥 Presencial\n"
+                "💻 Online\n\n"
+                "Por favor, responda Presencial ou Online."
+            )
+        })
+
+    # =============================
+    # MODALIDADE
+    # =============================
+
+    if estado["etapa"] == "perguntar_modalidade":
+
+        if "presencial" in mensagem:
+            estado["modalidade"] = "Presencial"
+        elif "online" in mensagem:
+            estado["modalidade"] = "Online"
+        else:
+            return jsonify({
+                "reply": "Por favor, responda apenas Presencial ou Online 😊"
+            })
+
+        estado["etapa"] = "confirmacao"
+
+        return jsonify({
+            "reply": (
+                f"Confirmando:\n"
+                f"📅 {estado['data'].strftime('%d/%m/%Y')}\n"
+                f"⏰ {estado['horario']}\n"
+                f"📍 {estado['modalidade']}\n"
+                f"👤 {estado['nome']}\n"
+                f"📞 {estado['telefone']}\n\n"
+                "Está correto? (sim ou não)"
+            )
+        })
 
     # =============================
     # CONFIRMAÇÃO
@@ -297,7 +356,11 @@ def chat():
 
         if "sim" in mensagem:
             sucesso = marcar_horario_sqlite(
-                estado["data"], estado["horario"], estado["nome"]
+                estado["data"],
+                estado["horario"],
+                estado["nome"],
+                estado["telefone"],
+                estado["modalidade"]
             )
             estado_usuario.pop(user_id)
 
@@ -389,7 +452,7 @@ def adicionar_horario():
         conn.commit()
         conn.close()
 
-    return redirect(url_for("admin_panel"))
+    return redirect(url_for("admin_panel", data=data) + "#novo")
 
 
 @app.route("/admin/excluir-horario/<int:horario_id>")
@@ -403,6 +466,43 @@ def excluir_horario_livre(horario_id):
     conn.commit()
     conn.close()
     return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/excluir-consultas-lote", methods=["POST"])
+@login_required
+def excluir_consultas_lote():
+    ids = request.form.getlist("consulta_ids")
+
+    if ids:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE agendamentos SET disponivel='sim', nome_paciente=NULL WHERE id IN ({','.join('?'*len(ids))})",
+            ids
+        )
+        conn.commit()
+        conn.close()
+
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/excluir-horarios-lote", methods=["POST"])
+@login_required
+def excluir_horarios_lote():
+    ids = request.form.getlist("horario_ids")
+
+    if ids:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            f"DELETE FROM agendamentos WHERE id IN ({','.join('?'*len(ids))}) AND disponivel='sim'",
+            ids
+        )
+        conn.commit()
+        conn.close()
+
+    return redirect(url_for("admin_panel"))
+
 
 #if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
 
