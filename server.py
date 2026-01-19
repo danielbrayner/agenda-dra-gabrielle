@@ -228,7 +228,7 @@ def chat():
             estado["boas_vindas_enviadas"] = True
             return jsonify({
                 "reply": (
-                    "Sou o assistente virtual inteligente da Dra. Gabrielle. "
+                    "Olá, sou o assistente virtual inteligente da Dra. Gabrielle. "
                     "Espero que esteja bem 😊. Como posso ajudar?\n"
                     "Você pode reiniciar esse atendimento a qualquer momento digitando Reiniciar."
                 )
