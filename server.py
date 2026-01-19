@@ -81,6 +81,32 @@ def marcar_horario_sqlite(data, horario, nome_paciente, telefone, modalidade):
     conn.close()
     return True
 
+def garantir_colunas_agendamentos():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("PRAGMA table_info(agendamentos)")
+    colunas = [col[1] for col in cursor.fetchall()]
+
+    if "telefone" not in colunas:
+        cursor.execute(
+            "ALTER TABLE agendamentos ADD COLUMN telefone TEXT"
+        )
+
+    if "modalidade" not in colunas:
+        cursor.execute(
+            "ALTER TABLE agendamentos ADD COLUMN modalidade TEXT"
+        )
+
+    if "criado_em" not in colunas:
+        cursor.execute(
+            "ALTER TABLE agendamentos ADD COLUMN criado_em TEXT"
+        )
+
+    conn.commit()
+    conn.close()
+
+garantir_colunas_agendamentos()
 # =============================
 # AUTH ADMIN
 # =============================
@@ -387,10 +413,10 @@ def chat():
 def admin_login():
     if request.method == "POST":
         if (
-            request.form.get("usuario") == os.getenv("ADMIN_USER")
-            and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
-            #request.form.get("usuario") == "admin"
-            #and request.form.get("senha") == "admin"
+            #request.form.get("usuario") == os.getenv("ADMIN_USER")
+            #and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
+            request.form.get("usuario") == "admin"
+            and request.form.get("senha") == "admin"
         ):
             session["admin_logado"] = True
             return redirect(url_for("admin_panel"))
@@ -504,7 +530,7 @@ def excluir_horarios_lote():
     return redirect(url_for("admin_panel"))
 
 
-#if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
+if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+#if __name__ == "__main__":
+#    app.run(host="0.0.0.0", port=10000)
