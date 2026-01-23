@@ -5,6 +5,10 @@ import os
 from dotenv import load_dotenv
 import sqlite3
 from datetime import datetime, timedelta
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from urllib.parse import urlparse
+
 
 load_dotenv()
 
@@ -20,93 +24,176 @@ estado_usuario = {}
 # =============================
 # BANCO DE DADOS
 # =============================
+
+
 def get_db_connection():
+    database_url = os.getenv("DATABASE_URL")
+
+    # ====== PRODUÇÃO (Render → PostgreSQL) ======
+    if database_url:
+        url = urlparse(database_url)
+        conn = psycopg2.connect(
+            host=url.hostname,
+            database=url.path[1:],
+            user=url.username,
+            password=url.password,
+            port=url.port
+        )
+        return conn
+
+    # ====== LOCAL (seu PC → SQLite) ======
     conn = sqlite3.connect("agenda.db")
     conn.row_factory = sqlite3.Row
     return conn
 
 
+# =============================
+# UTILITÁRIOS BANCO (SQLite + Postgres)
+# =============================
+
+def is_postgres(conn):
+    return conn.__class__.__module__ != "sqlite3"
+
+
+def get_placeholder(conn):
+    return "%s" if is_postgres(conn) else "?"
+
+
+def fetchall_dict(cursor):
+    """
+    Retorna resultados sempre como dicionário,
+    tanto no SQLite quanto no Postgres
+    """
+    columns = [col[0] for col in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+
 def buscar_disponibilidade_sqlite():
     conn = get_db_connection()
     cursor = conn.cursor()
+    p = get_placeholder(conn)
 
     hoje = datetime.now().date()
     limite = hoje + timedelta(days=14)
 
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT data, horario
         FROM agendamentos
         WHERE disponivel = 'sim'
-          AND date(data) BETWEEN ? AND ?
+          AND data BETWEEN {p} AND {p}
         ORDER BY data, horario
     """, (str(hoje), str(limite)))
 
-    rows = cursor.fetchall()
+    rows = fetchall_dict(cursor)
     conn.close()
 
-    return [(datetime.strptime(r["data"], "%Y-%m-%d").date(), r["horario"]) for r in rows]
+    return [
+        (datetime.strptime(r["data"], "%Y-%m-%d").date(), r["horario"])
+        for r in rows
+    ]
 
 
 def marcar_horario_sqlite(data, horario, nome_paciente, telefone, modalidade):
     conn = get_db_connection()
     cursor = conn.cursor()
+    p = get_placeholder(conn)
 
-    cursor.execute("""
-        SELECT id FROM agendamentos
-        WHERE data = ? AND horario = ? AND disponivel = 'sim'
-    """, (str(data), horario))
+    cursor.execute(
+        f"SELECT id FROM agendamentos WHERE data = {p} AND horario = {p} AND disponivel = 'sim'",
+        (str(data), horario)
+    )
 
     row = cursor.fetchone()
     if not row:
         conn.close()
         return False
 
-    cursor.execute("""
+    agendamento_id = row[0]
+
+    cursor.execute(f"""
         UPDATE agendamentos
         SET disponivel = 'nao',
-            nome_paciente = ?,
-            telefone = ?,
-            modalidade = ?,
-            criado_em = ?
-        WHERE id = ?
+            nome_paciente = {p},
+            telefone = {p},
+            modalidade = {p},
+            criado_em = {p}
+        WHERE id = {p}
     """, (
         nome_paciente,
         telefone,
         modalidade,
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        row["id"]
+        agendamento_id
     ))
 
     conn.commit()
     conn.close()
     return True
 
+
+
 def garantir_colunas_agendamentos():
     conn = get_db_connection()
-    cursor = conn.cursor()
 
+    if is_postgres(conn):
+        conn.close()
+        return
+
+    cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(agendamentos)")
     colunas = [col[1] for col in cursor.fetchall()]
 
     if "telefone" not in colunas:
-        cursor.execute(
-            "ALTER TABLE agendamentos ADD COLUMN telefone TEXT"
-        )
+        cursor.execute("ALTER TABLE agendamentos ADD COLUMN telefone TEXT")
 
     if "modalidade" not in colunas:
-        cursor.execute(
-            "ALTER TABLE agendamentos ADD COLUMN modalidade TEXT"
-        )
-
-    if "criado_em" not in colunas:
-        cursor.execute(
-            "ALTER TABLE agendamentos ADD COLUMN criado_em TEXT"
-        )
+        cursor.execute("ALTER TABLE agendamentos ADD COLUMN modalidade TEXT")
 
     conn.commit()
     conn.close()
 
+
 garantir_colunas_agendamentos()
+
+def deletar_por_id(id_valor):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    p = get_placeholder(conn)
+
+    cursor.execute(f"DELETE FROM agendamentos WHERE id = {p}", (id_valor,))
+    conn.commit()
+    conn.close()
+
+    def deletar_varios(ids):
+        if not ids:
+            return
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        p = get_placeholder(conn)
+
+        for id_valor in ids:
+            cursor.execute(f"DELETE FROM agendamentos WHERE id = {p}", (id_valor,))
+
+        conn.commit()
+        conn.close()
+
+def deletar_varios(ids):
+    if not ids:
+        return
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    p = get_placeholder(conn)
+
+    for id_valor in ids:
+        cursor.execute(f"DELETE FROM agendamentos WHERE id = {p}", (id_valor,))
+
+    conn.commit()
+    conn.close()
+
+
 # =============================
 # AUTH ADMIN
 # =============================
@@ -413,10 +500,10 @@ def chat():
 def admin_login():
     if request.method == "POST":
         if (
-            request.form.get("usuario") == os.getenv("ADMIN_USER")
-            and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
-            #request.form.get("usuario") == "admin"
-            #and request.form.get("senha") == "admin"
+            #request.form.get("usuario") == os.getenv("ADMIN_USER")
+            #and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
+            request.form.get("usuario") == "admin"
+            and request.form.get("senha") == "admin"
         ):
             session["admin_logado"] = True
             return redirect(url_for("admin_panel"))
@@ -428,12 +515,22 @@ def admin_login():
 @login_required
 def admin_panel():
     conn = get_db_connection()
-    consultas = conn.execute(
-        "SELECT * FROM agendamentos WHERE disponivel='nao' ORDER BY data, horario"
-    ).fetchall()
-    horarios_livres = conn.execute(
-        "SELECT * FROM agendamentos WHERE disponivel='sim' ORDER BY data, horario"
-    ).fetchall()
+    cursor = conn.cursor()
+
+    consultas = cursor.execute("""
+        SELECT * FROM agendamentos
+        WHERE disponivel = 'nao'
+        ORDER BY data, horario
+    """)
+    consultas = fetchall_dict(cursor)
+
+    cursor.execute("""
+        SELECT * FROM agendamentos
+        WHERE disponivel = 'sim'
+        ORDER BY data, horario
+    """)
+    horarios_livres = fetchall_dict(cursor)
+
     conn.close()
 
     return render_template(
@@ -441,6 +538,7 @@ def admin_panel():
         consultas=consultas,
         horarios_livres=horarios_livres
     )
+
 
 
 @app.route("/admin/logout")
@@ -452,85 +550,52 @@ def admin_logout():
 @app.route("/admin/excluir/<int:consulta_id>")
 @login_required
 def excluir_consulta(consulta_id):
-    conn = get_db_connection()
-    conn.execute("""
-        UPDATE agendamentos
-        SET disponivel='sim', nome_paciente=NULL
-        WHERE id=?
-    """, (consulta_id,))
-    conn.commit()
-    conn.close()
-    return redirect(url_for("admin_panel"))
+    deletar_por_id(consulta_id)
+    return redirect("/admin#consultas")
 
 
 @app.route("/admin/adicionar-horario", methods=["POST"])
 @login_required
 def adicionar_horario():
-    data = request.form.get("data")
-    horario = request.form.get("horario")
+    data = request.form["data"]
+    horario = request.form["horario"]
 
-    if data and horario:
-        conn = get_db_connection()
-        conn.execute(
-            "INSERT INTO agendamentos (data, horario, disponivel) VALUES (?, ?, 'sim')",
-            (data, horario)
-        )
-        conn.commit()
-        conn.close()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    p = get_placeholder(conn)
 
-    return redirect(url_for("admin_panel", data=data) + "#novo")
+    cursor.execute(
+        f"INSERT INTO agendamentos (data, horario, disponivel) VALUES ({p}, {p}, 'sim')",
+        (data, horario)
+    )
+
+    conn.commit()
+    conn.close()
+    return redirect("/admin#novo")
 
 
 @app.route("/admin/excluir-horario/<int:horario_id>")
 @login_required
 def excluir_horario_livre(horario_id):
-    conn = get_db_connection()
-    conn.execute(
-        "DELETE FROM agendamentos WHERE id=? AND disponivel='sim'",
-        (horario_id,)
-    )
-    conn.commit()
-    conn.close()
-    return redirect(url_for("admin_panel"))
+    deletar_por_id(horario_id)
+    return redirect("/admin#horarios")
 
 
 @app.route("/admin/excluir-consultas-lote", methods=["POST"])
 @login_required
 def excluir_consultas_lote():
-    ids = request.form.getlist("consulta_ids")
-
-    if ids:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            f"UPDATE agendamentos SET disponivel='sim', nome_paciente=NULL WHERE id IN ({','.join('?'*len(ids))})",
-            ids
-        )
-        conn.commit()
-        conn.close()
-
-    return redirect(url_for("admin_panel"))
+    deletar_varios(request.form.getlist("consulta_ids"))
+    return redirect("/admin#consultas")
 
 
 @app.route("/admin/excluir-horarios-lote", methods=["POST"])
 @login_required
 def excluir_horarios_lote():
-    ids = request.form.getlist("horario_ids")
-
-    if ids:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            f"DELETE FROM agendamentos WHERE id IN ({','.join('?'*len(ids))}) AND disponivel='sim'",
-            ids
-        )
-        conn.commit()
-        conn.close()
-
-    return redirect(url_for("admin_panel"))
+    deletar_varios(request.form.getlist("horario_ids"))
+    return redirect("/admin#horarios")
 
 
-#if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
+if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+#if __name__ == "__main__":
+#    app.run(host="0.0.0.0", port=10000)
