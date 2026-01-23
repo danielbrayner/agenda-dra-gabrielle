@@ -500,10 +500,10 @@ def chat():
 def admin_login():
     if request.method == "POST":
         if (
-            #request.form.get("usuario") == os.getenv("ADMIN_USER")
-            #and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
-            request.form.get("usuario") == "admin"
-            and request.form.get("senha") == "admin"
+            request.form.get("usuario") == os.getenv("ADMIN_USER")
+            and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
+            #request.form.get("usuario") == "admin"
+            #and request.form.get("senha") == "admin"
         ):
             session["admin_logado"] = True
             return redirect(url_for("admin_panel"))
