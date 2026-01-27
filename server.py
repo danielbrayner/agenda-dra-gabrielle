@@ -452,10 +452,10 @@ def admin_login():
 
 
         if (
-            #usuario == os.getenv("ADMIN_USER")
-            #and senha == os.getenv("ADMIN_PASSWORD")
-            request.form.get("usuario") == "admin"
-            and request.form.get("senha") == "admin"
+            usuario == os.getenv("ADMIN_USER")
+            and senha == os.getenv("ADMIN_PASSWORD")
+            #request.form.get("usuario") == "admin"
+            #and request.form.get("senha") == "admin"
         ):
             session["admin_logado"] = True
             return redirect(url_for("admin_panel"))
@@ -589,8 +589,8 @@ def excluir_horarios_lote():
 
 
 
-if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
+#if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
 
-#if __name__ == "__main__":
-#    app.run(host="0.0.0.0", port=10000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
 
