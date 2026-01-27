@@ -175,7 +175,7 @@ def detectar_intencao(msg):
 
     if any(p in msg for p in ["reiniciar", "recomeçar"]):
         return "REINICIAR"
-    if any(p in msg for p in ["quanto custa", "valor", "preço", "preco"]):
+    if any(p in msg for p in ["quanto custa", "valor", "preço", "valores", "preco"]):
         return "PRECO"
     if any(p in msg for p in [
         "onde atende",
@@ -191,7 +191,7 @@ def detectar_intencao(msg):
         return "LOCAL"
     if any(p in msg for p in ["horário", "horarios", "disponível", "disponiveis", "vaga"]):
         return "HORARIOS"
-    if any(p in msg for p in ["marcar", "marca", "agenda consulta", "agendar"]):
+    if any(p in msg for p in ["marcar", "marca", "agendamento", "agenda consulta", "agendar"]):
         return "AGENDAR"
     if any(p in msg for p in ["não quero marcar", "nao quero marcar"]):
         return "DESISTIR"
@@ -287,7 +287,7 @@ def chat():
             return jsonify({"reply": "💰 O valor da consulta é R$ 450,00 (particular)."})
 
         if intencao == "LOCAL":
-            return jsonify({"reply": "📍 A Dra Gabrielle atende presencialmente no Shopping Aldeota – Sala 1605"})
+            return jsonify({"reply": "📍 A Dra Gabrielle atende presencialmente no Shopping Aldeota – Sala 1628"})
 
         if intencao == "HORARIOS":
             horarios = buscar_disponibilidade()
@@ -325,7 +325,7 @@ def chat():
             return jsonify({"reply": "Posso te passar essas informações 😊\nMas antes, me informe seu nome completo para continuar o agendamento."})
 
         if not parece_nome(mensagem_original):
-            return jsonify({"reply": "😊 Para continuar o agendamento, me informe seu *nome completo*."})
+            return jsonify({"reply": "😊 Para continuar o agendamento, me informe seu Nome completo."})
 
         estado["nome"] = mensagem_original
         estado["etapa"] = "pedir_telefone"
@@ -392,12 +392,18 @@ def chat():
     # =============================
     if estado["etapa"] == "perguntar_modalidade":
 
-        if "presencial" in mensagem:
+        msg = mensagem.replace("-", "").strip().lower()
+
+        if "presencial" in msg:
             estado["modalidade"] = "Presencial"
-        elif "online" in mensagem:
+
+        elif "online" in msg:
             estado["modalidade"] = "Online"
+
         else:
-            return jsonify({"reply": "Por favor, responda apenas Presencial ou Online 😊"})
+            return jsonify({
+                "reply": "Por favor, responda apenas Presencial ou Online 😊"
+            })
 
         estado["etapa"] = "confirmacao"
 
@@ -432,7 +438,7 @@ def chat():
                 return jsonify({
                     "reply": (
                         "✅ Consulta confirmada!\n"
-                        "📍 Shopping Aldeota – Sala 1605\n"
+                        "📍 Shopping Aldeota – Sala 1628\n"
                         "💰 Valor: R$ 450,00\n\n"
                         "Qualquer dúvida, estou à disposição 😊"
                     )
@@ -455,10 +461,10 @@ def admin_login():
 
 
         if (
-            usuario == os.getenv("ADMIN_USER")
-            and senha == os.getenv("ADMIN_PASSWORD")
-            #request.form.get("usuario") == "admin"
-            #and request.form.get("senha") == "admin"
+            #usuario == os.getenv("ADMIN_USER")
+            #and senha == os.getenv("ADMIN_PASSWORD")
+            request.form.get("usuario") == "admin"
+            and request.form.get("senha") == "admin"
         ):
             session["admin_logado"] = True
             return redirect(url_for("admin_panel"))
@@ -592,8 +598,8 @@ def excluir_horarios_lote():
 
 
 
-#if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
+if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+#if __name__ == "__main__":
+#    app.run(host="0.0.0.0", port=10000)
 
