@@ -89,7 +89,7 @@ def buscar_disponibilidade_sqlite():
     conn.close()
 
     return [
-        (datetime.strptime(r["data"], "%Y-%m-%d").date(), r["horario"])
+        (r["data"], r["horario"])
         for r in rows
     ]
 
