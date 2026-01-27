@@ -191,7 +191,7 @@ def detectar_intencao(msg):
         return "LOCAL"
     if any(p in msg for p in ["horário", "horarios", "disponível", "disponiveis", "vaga"]):
         return "HORARIOS"
-    if any(p in msg for p in ["marcar", "agendar"]):
+    if any(p in msg for p in ["marcar", "marca", "agenda consulta", "agendar"]):
         return "AGENDAR"
     if any(p in msg for p in ["não quero marcar", "nao quero marcar"]):
         return "DESISTIR"
