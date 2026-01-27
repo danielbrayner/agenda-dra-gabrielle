@@ -19,10 +19,11 @@
       font-family: 'Inter', Arial, sans-serif;
       background: #f4f6fb;
       margin: 0;
-      height: 100vh;
+      height: 100dvh; /* altura real do celular */
       display: flex;
       flex-direction: column;
     }
+
 
     header {
       background: #0b5fff;
@@ -57,12 +58,12 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      padding: 16px;
-      gap: 12px;
-      max-width: 900px;
+      padding: 12px;
+      gap: 10px;
       width: 100%;
       margin: 0 auto;
     }
+
 
     .messages {
       flex: 1;
@@ -143,20 +144,45 @@
 
     /* Mobile ajustes */
     @media (max-width: 600px) {
-      .container {
-        padding: 10px;
-      }
-
-      .messages {
+      header {
         padding: 12px;
       }
 
+      .container {
+        padding: 8px;
+        gap: 8px;
+      }
+
+      .messages {
+        border-radius: 10px;
+        padding: 10px;
+      }
+
       .msg {
-        max-width: 85%;
+        max-width: 90%;
+        font-size: 15px;
+      }
+
+      .composer {
+        position: sticky;
+        bottom: 0;
+        border-radius: 12px;
+      }
+
+      textarea {
+        font-size: 16px; /* evita zoom automático no iPhone */
+      }
+
+      button {
+        padding: 0 14px;
       }
     }
 
 
+    .messages {
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
 
 
     .options-container {
