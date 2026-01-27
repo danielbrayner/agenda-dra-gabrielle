@@ -10,11 +10,47 @@ function appendMessage(text, cls){
   messagesEl.scrollTop = messagesEl.scrollHeight
 }
 
-async function sendMessage(){
-  const text = inputEl.value.trim()
+// 🔘 FUNÇÃO PARA MOSTRAR BOTÕES DE OPÇÃO
+function addOptions(options){
+  const container = document.createElement('div')
+  container.className = 'msg assistant options-container'
+
+  // 👇 Faz os botões ficarem um embaixo do outro
+  container.style.display = 'flex'
+  container.style.flexDirection = 'column'
+  container.style.gap = '8px'
+  container.style.marginTop = '6px'
+
+  options.forEach(opt => {
+    const btn = document.createElement('button')
+    btn.className = 'option-btn'
+    btn.textContent = opt
+
+
+
+    btn.onclick = () => {
+      appendMessage(opt, 'user')   // mostra a escolha do usuário
+      container.remove()           // remove os botões
+      sendMessage(opt)             // envia pro backend
+    }
+
+    container.appendChild(btn)
+  })
+
+  messagesEl.appendChild(container)
+  messagesEl.scrollTop = messagesEl.scrollHeight
+}
+
+
+// 🚀 ENVIO DE MENSAGEM (AGORA ACEITA TEXTO OPCIONAL)
+async function sendMessage(textOverride = null){
+  const text = textOverride || inputEl.value.trim()
   if(!text) return
-  appendMessage(text, 'user')
-  inputEl.value = ''
+
+  if(!textOverride){
+    appendMessage(text, 'user')
+    inputEl.value = ''
+  }
 
   appendMessage('...', 'assistant')
   const lastPlaceholder = messagesEl.querySelector('.assistant:last-child')
@@ -25,7 +61,9 @@ async function sendMessage(){
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({message: text})
     })
+
     const data = await resp.json()
+
     if(data.reply){
       lastPlaceholder.textContent = data.reply
     } else if(data.error){
@@ -33,10 +71,21 @@ async function sendMessage(){
     } else {
       lastPlaceholder.textContent = 'Resposta inesperada.'
     }
+
+    // ⭐ SE O BACKEND ENVIAR OPÇÕES → MOSTRA BOTÕES
+    if(data.options){
+      addOptions(data.options)
+    }
+
   }catch(err){
     lastPlaceholder.textContent = 'Falha ao conectar: ' + err.message
   }
 }
 
-sendBtn.addEventListener('click', sendMessage)
-inputEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage() } })
+sendBtn.addEventListener('click', () => sendMessage())
+inputEl.addEventListener('keydown', (e)=>{
+  if(e.key==='Enter' && !e.shiftKey){
+    e.preventDefault()
+    sendMessage()
+  }
+})

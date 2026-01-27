@@ -31,6 +31,10 @@
                 text-align: center;
             }
         }
+
+
+
+
     </style>
 </head>
 
@@ -95,26 +99,24 @@
                             <td>
                                 <input type="checkbox" name="consulta_ids" value="{{ c.id }}" class="consulta">
                             </td>
-                            <td>{{ c.data.strftime('%d/%m/%Y') }}</td>
+                            <td>{{ c.data_formatada }}</td>
                             <td>{{ c.horario }}</td>
                             <td>{{ c.modalidade }}</td>
                             <td>{{ c.nome_paciente }}</td>
                             <td>{{ c.telefone }}</td>
                             <td>
                                 <a
-                                    href="https://wa.me/55{{ c.telefone | replace(' ', '') | replace('-', '') }}?text={{
-                                        (
-                                            'Olá! Você tem uma consulta marcada com a Dra Gabrielle no dia '
-                                            ~ c.data.strftime('%d/%m/%Y')
-                                            ~ ' às '
-                                            ~ c.horario
-                                            ~ ' na modalidade '
-                                            ~ c.modalidade
-                                            ~ '.\n\nLembrando que a Dra atende no Shopping Aldeota - Sala 1605. '
-                                            ~ 'Caso sua consulta seja online, a Dra irá enviar um link no horário marcado.\n\n'
-                                            ~ 'Posso confirmar sua consulta?'
-                                        ) | urlencode
-                                    }}"
+                                    href="https://wa.me/55{{ c.telefone | replace(' ', '') | replace('-', '') | replace('(', '') | replace(')', '') }}?text={{ (
+                                        'Olá! Você tem uma consulta marcada com a Dra Gabrielle no dia '
+                                        ~ c.data_formatada
+                                        ~ ' às '
+                                        ~ c.horario
+                                        ~ ' na modalidade '
+                                        ~ c.modalidade
+                                        ~ '.\n\nLembrando que a Dra atende no Shopping Aldeota - Sala 1605. '
+                                        ~ 'Caso sua consulta seja online, a Dra irá enviar um link no horário marcado.\n\n'
+                                        ~ 'Posso confirmar sua consulta?'
+                                    ) | urlencode }}"
                                     target="_blank"
                                     class="btn btn-success btn-sm"
                                     title="Enviar mensagem de confirmação"
@@ -122,7 +124,6 @@
                                     📲 Confirmar
                                 </a>
                             </td>
-
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -165,7 +166,7 @@
                             <td>
                                 <input type="checkbox" name="horario_ids" value="{{ h.id }}" class="horario">
                             </td>
-                            <td>{{ h.data.strftime('%d/%m/%Y') }}</td>
+                            <td>{{ h.data_formatada }}</td>
                             <td>{{ h.horario }}</td>
                         </tr>
                         {% endfor %}
@@ -190,6 +191,11 @@
             ➕ Adicionar novo horário
         </div>
         <div class="card-body">
+            {% if request.args.get('erro') == 'horario_existe' %}
+            <div class="alert alert-danger">
+                ⚠️ Já existe um horário cadastrado para essa data e horário.
+            </div>
+            {% endif %}
 
             <form method="POST" action="/admin/adicionar-horario#novo">
                 <div class="row g-3">
@@ -248,4 +254,3 @@ window.addEventListener('load', () => {
 
 </body>
 </html>
-

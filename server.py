@@ -4,10 +4,12 @@ from flask_cors import CORS
 import os
 from dotenv import load_dotenv
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import psycopg2
+from psycopg2 import errors
 from psycopg2.extras import RealDictCursor
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
+
 
 
 load_dotenv()
@@ -21,88 +23,66 @@ CORS(app)
 # =============================
 estado_usuario = {}
 
+
 # =============================
 # BANCO DE DADOS
 # =============================
 
-
 def get_db_connection():
     database_url = os.getenv("DATABASE_URL")
 
-    # ====== PRODUÇÃO (Render → PostgreSQL) ======
-    if database_url:
-        url = urlparse(database_url)
-        conn = psycopg2.connect(
-            host=url.hostname,
-            database=url.path[1:],
-            user=url.username,
-            password=url.password,
-            port=url.port
-        )
-        return conn
+    if not database_url:
+        raise RuntimeError("DATABASE_URL não configurada.")
 
-    # ====== LOCAL (seu PC → SQLite) ======
-    conn = sqlite3.connect("agenda.db")
-    conn.row_factory = sqlite3.Row
-    return conn
+    url = urlparse(database_url)
+
+    return psycopg2.connect(
+        host=url.hostname,
+        database=url.path[1:],
+        user=url.username,
+        password=url.password,
+        port=url.port
+    )
 
 
-# =============================
-# UTILITÁRIOS BANCO (SQLite + Postgres)
-# =============================
-
-def is_postgres(conn):
-    return conn.__class__.__module__ != "sqlite3"
-
-
-def get_placeholder(conn):
-    return "%s" if is_postgres(conn) else "?"
 
 
 def fetchall_dict(cursor):
-    """
-    Retorna resultados sempre como dicionário,
-    tanto no SQLite quanto no Postgres
-    """
     columns = [col[0] for col in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
 
-def buscar_disponibilidade_sqlite():
+def buscar_disponibilidade():
     conn = get_db_connection()
     cursor = conn.cursor()
-    p = get_placeholder(conn)
 
     hoje = datetime.now().date()
     limite = hoje + timedelta(days=14)
 
-    cursor.execute(f"""
+    cursor.execute("""
         SELECT data, horario
         FROM agendamentos
         WHERE disponivel = 'sim'
-          AND data BETWEEN {p} AND {p}
+          AND data BETWEEN %s AND %s
         ORDER BY data, horario
-    """, (str(hoje), str(limite)))
+    """, (hoje, limite))
 
     rows = fetchall_dict(cursor)
     conn.close()
 
-    return [
-        (r["data"], r["horario"])
-        for r in rows
-    ]
+    return [(r["data"], r["horario"]) for r in rows]
 
 
-def marcar_horario_sqlite(data, horario, nome_paciente, telefone, modalidade):
+
+def marcar_horario(data, horario, nome_paciente, telefone, modalidade):
     conn = get_db_connection()
     cursor = conn.cursor()
-    p = get_placeholder(conn)
 
-    cursor.execute(
-        f"SELECT id FROM agendamentos WHERE data = {p} AND horario = {p} AND disponivel = 'sim'",
-        (str(data), horario)
-    )
+    cursor.execute("""
+        SELECT id FROM agendamentos
+        WHERE data = %s AND horario = %s AND disponivel = 'sim'
+    """, (data, horario))
 
     row = cursor.fetchone()
     if not row:
@@ -111,19 +91,18 @@ def marcar_horario_sqlite(data, horario, nome_paciente, telefone, modalidade):
 
     agendamento_id = row[0]
 
-    cursor.execute(f"""
+    cursor.execute("""
         UPDATE agendamentos
         SET disponivel = 'nao',
-            nome_paciente = {p},
-            telefone = {p},
-            modalidade = {p},
-            criado_em = {p}
-        WHERE id = {p}
+            nome_paciente = %s,
+            telefone = %s,
+            modalidade = %s,
+            criado_em = NOW()
+        WHERE id = %s
     """, (
         nome_paciente,
         telefone,
         modalidade,
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         agendamento_id
     ))
 
@@ -133,51 +112,16 @@ def marcar_horario_sqlite(data, horario, nome_paciente, telefone, modalidade):
 
 
 
-def garantir_colunas_agendamentos():
-    conn = get_db_connection()
-
-    if is_postgres(conn):
-        conn.close()
-        return
-
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(agendamentos)")
-    colunas = [col[1] for col in cursor.fetchall()]
-
-    if "telefone" not in colunas:
-        cursor.execute("ALTER TABLE agendamentos ADD COLUMN telefone TEXT")
-
-    if "modalidade" not in colunas:
-        cursor.execute("ALTER TABLE agendamentos ADD COLUMN modalidade TEXT")
-
-    conn.commit()
-    conn.close()
-
-
-garantir_colunas_agendamentos()
-
 def deletar_por_id(id_valor):
     conn = get_db_connection()
     cursor = conn.cursor()
-    p = get_placeholder(conn)
 
-    cursor.execute(f"DELETE FROM agendamentos WHERE id = {p}", (id_valor,))
+    cursor.execute("DELETE FROM agendamentos WHERE id = %s", (id_valor,))
+
     conn.commit()
     conn.close()
 
-    def deletar_varios(ids):
-        if not ids:
-            return
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        p = get_placeholder(conn)
-
-        for id_valor in ids:
-            cursor.execute(f"DELETE FROM agendamentos WHERE id = {p}", (id_valor,))
-
-        conn.commit()
-        conn.close()
 
 def deletar_varios(ids):
     if not ids:
@@ -185,13 +129,25 @@ def deletar_varios(ids):
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    p = get_placeholder(conn)
 
-    for id_valor in ids:
-        cursor.execute(f"DELETE FROM agendamentos WHERE id = {p}", (id_valor,))
+    cursor.execute(
+        "DELETE FROM agendamentos WHERE id = ANY(%s)",
+        (ids,)
+    )
 
     conn.commit()
     conn.close()
+
+
+
+def garantir_date(valor):
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    return None
+
+
 
 
 # =============================
@@ -331,13 +287,15 @@ def chat():
             return jsonify({"reply": "📍 A Dra Gabrielle atende presencialmente no Shopping Aldeota – Sala 1605"})
 
         if intencao == "HORARIOS":
-            horarios = buscar_disponibilidade_sqlite()
+            horarios = buscar_disponibilidade()
             if not horarios:
                 return jsonify({"reply": "No momento não há horários disponíveis."})
 
             texto = "📅 Horários disponíveis:\n"
             for d, h in horarios:
+                d = garantir_date(d)
                 texto += f"- {d.strftime('%d/%m/%Y')} às {h}\n"
+
             texto += "\nSe quiser, posso agendar para você 😊"
             return jsonify({"reply": texto})
 
@@ -361,12 +319,7 @@ def chat():
     if estado["etapa"] == "pedir_nome":
 
         if eh_pergunta_administrativa(mensagem):
-            if "valor" in mensagem or "preço" in mensagem or "preco" in mensagem:
-                return jsonify({"reply": "💰 O valor da consulta é R$ 450,00.\n\nQuando quiser continuar, me informe seu nome completo 😊"})
-            if "onde atende" in mensagem or "endereco" in mensagem or "endereço" in mensagem:
-                return jsonify({"reply": "📍 Shopping Aldeota – Sala 1605\n\nQuando quiser continuar, me informe seu nome completo 😊"})
-            if "duracao" in mensagem or "duração" in mensagem:
-                return jsonify({"reply": "⏱️ A consulta dura cerca de 1 hora.\n\nQuando quiser continuar, me informe seu nome completo 😊"})
+            return jsonify({"reply": "Posso te passar essas informações 😊\nMas antes, me informe seu nome completo para continuar o agendamento."})
 
         if not parece_nome(mensagem_original):
             return jsonify({"reply": "😊 Para continuar o agendamento, me informe seu *nome completo*."})
@@ -374,31 +327,32 @@ def chat():
         estado["nome"] = mensagem_original
         estado["etapa"] = "pedir_telefone"
 
-
     # =============================
     # PEDIR TELEFONE
     # =============================
     if estado["etapa"] == "pedir_telefone":
 
         if not parece_telefone(mensagem_original):
-            return jsonify({
-                "reply": "📞 Por favor, informe um telefone válido com DDD (ex: 85999999999)."
-            })
+            return jsonify({"reply": "📞 Por favor, informe um telefone válido com DDD (ex: 85999999999)."})
 
         estado["telefone"] = mensagem_original
         estado["etapa"] = "mostrar_horarios"
 
-        horarios = buscar_disponibilidade_sqlite()
+        horarios = buscar_disponibilidade()
         if not horarios:
             estado_usuario.pop(user_id)
             return jsonify({"reply": "No momento não há horários disponíveis."})
 
-        texto = "Temos os seguintes horários disponíveis:\n"
+        opcoes = []
         for d, h in horarios:
-            texto += f"- {d.strftime('%d/%m/%Y')} às {h}\n"
+            data_str = d.strftime("%d/%m/%Y")
+            hora_str = h.strftime("%H:%M")
+            opcoes.append(f"{data_str} {hora_str}")
 
-        texto += "\nInforme a data e o horário desejados (ex: 18/12 14:00)."
-        return jsonify({"reply": texto})
+        return jsonify({
+            "reply": "📅 Escolha um dos horários disponíveis:",
+            "options": opcoes
+        })
 
     # =============================
     # ESCOLHER HORÁRIO
@@ -407,21 +361,18 @@ def chat():
         try:
             partes = mensagem.replace("às", "").replace("as", "").split()
             data_str, hora_str = partes[0], partes[1]
-            if ":" not in hora_str:
+
+            if len(hora_str) == 5:
                 hora_str += ":00"
 
-            dia, mes = map(int, data_str.split("/"))
-            hoje = datetime.now().date()
-            ano = hoje.year
-            data = datetime(ano, mes, dia).date()
-            if data < hoje:
-                data = datetime(ano + 1, mes, dia).date()
+            dia, mes, ano = map(int, data_str.split("/"))
+            data_escolhida = date(ano, mes, dia)
 
-            estado["data"] = data
+            estado["data"] = data_escolhida
             estado["horario"] = hora_str
 
         except:
-            return jsonify({"reply": "Use o formato: 18/12 14:00"})
+            return jsonify({"reply": "Clique em um dos horários da lista 😊"})
 
         estado["etapa"] = "perguntar_modalidade"
         return jsonify({
@@ -436,7 +387,6 @@ def chat():
     # =============================
     # MODALIDADE
     # =============================
-
     if estado["etapa"] == "perguntar_modalidade":
 
         if "presencial" in mensagem:
@@ -444,9 +394,7 @@ def chat():
         elif "online" in mensagem:
             estado["modalidade"] = "Online"
         else:
-            return jsonify({
-                "reply": "Por favor, responda apenas Presencial ou Online 😊"
-            })
+            return jsonify({"reply": "Por favor, responda apenas Presencial ou Online 😊"})
 
         estado["etapa"] = "confirmacao"
 
@@ -468,7 +416,7 @@ def chat():
     if estado["etapa"] == "confirmacao":
 
         if "sim" in mensagem:
-            sucesso = marcar_horario_sqlite(
+            sucesso = marcar_horario(
                 estado["data"],
                 estado["horario"],
                 estado["nome"],
@@ -499,16 +447,23 @@ def chat():
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     if request.method == "POST":
+        usuario = request.form.get("usuario")
+        senha = request.form.get("senha")
+
+
         if (
-            request.form.get("usuario") == os.getenv("ADMIN_USER")
-            and request.form.get("senha") == os.getenv("ADMIN_PASSWORD")
-            #request.form.get("usuario") == "admin"
-            #and request.form.get("senha") == "admin"
+            #usuario == os.getenv("ADMIN_USER")
+            #and senha == os.getenv("ADMIN_PASSWORD")
+            request.form.get("usuario") == "admin"
+            and request.form.get("senha") == "admin"
         ):
             session["admin_logado"] = True
             return redirect(url_for("admin_panel"))
+
         return render_template("admin_login.html", erro="Usuário ou senha inválidos")
+
     return render_template("admin_login.html")
+
 
 
 @app.route("/admin")
@@ -517,15 +472,28 @@ def admin_panel():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    consultas = cursor.execute("""
-        SELECT * FROM agendamentos
+    # CONSULTAS AGENDADAS
+    cursor.execute("""
+        SELECT 
+            id,
+            TO_CHAR(data, 'DD/MM/YYYY') AS data_formatada,
+            horario,
+            modalidade,
+            nome_paciente,
+            telefone
+        FROM agendamentos
         WHERE disponivel = 'nao'
         ORDER BY data, horario
     """)
     consultas = fetchall_dict(cursor)
 
+    # HORÁRIOS LIVRES
     cursor.execute("""
-        SELECT * FROM agendamentos
+        SELECT 
+            id,
+            TO_CHAR(data, 'DD/MM/YYYY') AS data_formatada,
+            horario
+        FROM agendamentos
         WHERE disponivel = 'sim'
         ORDER BY data, horario
     """)
@@ -541,17 +509,21 @@ def admin_panel():
 
 
 
+
+
 @app.route("/admin/logout")
 def admin_logout():
     session.clear()
     return redirect(url_for("admin_login"))
 
 
+
 @app.route("/admin/excluir/<int:consulta_id>")
 @login_required
 def excluir_consulta(consulta_id):
     deletar_por_id(consulta_id)
-    return redirect("/admin#consultas")
+    return redirect(url_for("admin_panel") + "#consultas")
+
 
 
 @app.route("/admin/adicionar-horario", methods=["POST"])
@@ -562,40 +534,63 @@ def adicionar_horario():
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    p = get_placeholder(conn)
 
-    cursor.execute(
-        f"INSERT INTO agendamentos (data, horario, disponivel) VALUES ({p}, {p}, 'sim')",
-        (data, horario)
-    )
+    try:
+        cursor.execute(
+            """
+            INSERT INTO agendamentos (data, horario, disponivel)
+            VALUES (%s, %s, 'sim')
+            """,
+            (data, horario)
+        )
+        conn.commit()
 
-    conn.commit()
+    except errors.UniqueViolation:
+        conn.rollback()
+        conn.close()
+        query_string = urlencode({
+            "data": data,
+            "erro": "horario_existe"
+        })
+        return redirect(f"/admin?{query_string}#novo")
+
     conn.close()
-    return redirect("/admin#novo")
+    query_string = urlencode({"data": data})
+    return redirect(f"/admin?{query_string}#novo")
+
+
+
+
 
 
 @app.route("/admin/excluir-horario/<int:horario_id>")
 @login_required
 def excluir_horario_livre(horario_id):
     deletar_por_id(horario_id)
-    return redirect("/admin#horarios")
+    return redirect(url_for("admin_panel") + "#horarios")
+
 
 
 @app.route("/admin/excluir-consultas-lote", methods=["POST"])
 @login_required
 def excluir_consultas_lote():
-    deletar_varios(request.form.getlist("consulta_ids"))
-    return redirect("/admin#consultas")
+    ids = [int(i) for i in request.form.getlist("consulta_ids")]
+    deletar_varios(ids)
+    return redirect(url_for("admin_panel") + "#consultas")
+
 
 
 @app.route("/admin/excluir-horarios-lote", methods=["POST"])
 @login_required
 def excluir_horarios_lote():
-    deletar_varios(request.form.getlist("horario_ids"))
-    return redirect("/admin#horarios")
+    ids = [int(i) for i in request.form.getlist("horario_ids")]
+    deletar_varios(ids)
+    return redirect(url_for("admin_panel") + "#horarios")
 
 
-#if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
+
+#if __name__ == "__main__":
+#    app.run(host="0.0.0.0", port=10000)
+
