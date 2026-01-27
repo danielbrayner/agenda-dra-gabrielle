@@ -2,6 +2,17 @@ const messagesEl = document.getElementById('messages')
 const inputEl = document.getElementById('input')
 const sendBtn = document.getElementById('send')
 
+
+function getUserId(){
+  let userId = localStorage.getItem("chat_user_id")
+  if(!userId){
+    userId = crypto.randomUUID()
+    localStorage.setItem("chat_user_id", userId)
+  }
+  return userId
+}
+
+
 function appendMessage(text, cls){
   const div = document.createElement('div')
   div.className = `msg ${cls}`
@@ -56,11 +67,21 @@ async function sendMessage(textOverride = null){
   const lastPlaceholder = messagesEl.querySelector('.assistant:last-child')
 
   try{
-    const resp = await fetch('/chat', {
+    /*const resp = await fetch('/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({message: text})
+    })*/
+
+    const resp = await fetch('/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        message: text,
+        user_id: getUserId()   // 👈 NOVO
+      })
     })
+
 
     const data = await resp.json()
 

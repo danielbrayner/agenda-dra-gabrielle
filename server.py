@@ -235,7 +235,10 @@ def chat():
     if not mensagem:
         return jsonify({"error": "Mensagem vazia"}), 400
 
-    user_id = "usuario_unico"
+    #user_id = "usuario_unico"
+    user_id = data.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Usuário não identificado"}), 400
 
     if user_id not in estado_usuario:
         estado_usuario[user_id] = {
@@ -589,7 +592,7 @@ def excluir_horarios_lote():
 
 
 
-#if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
+if __name__ == '__main__': app.run(host='127.0.0.1', port=5000, debug=True)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
